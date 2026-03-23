@@ -1,0 +1,30 @@
+[package]
+name = "wkey"
+version = "0.1.0"
+edition = "2024"
+description = "A terminal-first cheatsheet for keyboard shortcuts and working notes"
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/greasycat/wkey"
+homepage = "https://github.com/greasycat/wkey"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
+ratatui = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.9"
+walkdir = "2.5"
+xdg = "3.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.20"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -1,0 +1,26 @@
+[shortcuts]
+down = { key = "Down", desc = "Select the next item" }
+next = { key = "Ctrl+N", desc = "Select the next item" }
+prev = { key = "Ctrl+P", desc = "Select the previous item" }
+quit = { key = "Ctrl+C", desc = "Quit the TUI" }
+up = { key = "Up", desc = "Select the previous item" }
+
+[notes]
+group-create = { desc = "wkey group create <group>" }
+group-delete = { desc = "wkey group delete <group>" }
+group-list = { desc = "wkey group list" }
+group-rename = { desc = "wkey group rename <old> <new>" }
+group-show = { desc = "wkey group show <group>" }
+init = { desc = "wkey init" }
+note-create = { desc = "wkey note create --group <group> <id> --desc \"...\"" }
+note-delete = { desc = "wkey note delete --group <group> <id>" }
+note-list = { desc = "wkey note list --group <group>" }
+note-move = { desc = "wkey note move --from-group <group> --to-group <group> <id>" }
+note-update = { desc = "wkey note update --group <group> <id> --desc \"...\"" }
+run = { desc = "Run wkey to open the interactive TUI" }
+search = { desc = "Run wkey --search to preselect an item with fzf" }
+shortcut-create = { desc = "wkey shortcut create --group <group> <id> --key <combo> --desc \"...\"" }
+shortcut-delete = { desc = "wkey shortcut delete --group <group> <id>" }
+shortcut-list = { desc = "wkey shortcut list --group <group>" }
+shortcut-move = { desc = "wkey shortcut move --from-group <group> --to-group <group> <id>" }
+shortcut-update = { desc = "wkey shortcut update --group <group> <id> --key <combo> --desc \"...\"" }
