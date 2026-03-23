@@ -1,5 +1,6 @@
 # wkey
 
+[![Rust](https://github.com/greasycat/wkey/actions/workflows/rust.yml/badge.svg)](https://github.com/greasycat/wkey/actions/workflows/rust.yml)
 
 https://github.com/user-attachments/assets/d5a4c757-491a-4d25-b98f-caf42b173b83
 
