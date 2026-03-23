@@ -1,5 +1,6 @@
 use crate::config::{APP_TITLE, KeyboardCell};
 use crate::model::{AppView, Item, ItemKind, Shortcut};
+use crate::pipeout;
 use crate::ui::keyboard::build_keyboard_lines_with_layout;
 use anyhow::Result;
 use crossterm::cursor::{MoveToColumn, position};
@@ -18,6 +19,7 @@ use std::io;
 use std::time::Duration;
 
 const STATIC_HEIGHT: u16 = 22;
+const ALL_GROUP_LABEL: &str = "All";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum ActiveFilter {
@@ -33,13 +35,22 @@ enum SelectorAction {
     Cancel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GroupSelection<'a> {
+    All,
+    Group(&'a str),
+    NoMatch,
+}
+
 #[derive(Debug, Default)]
 struct AppState {
     query: String,
     group_query: String,
     active_filter: ActiveFilter,
-    selected_index: usize,
-    list_offset: usize,
+    item_selected_index: usize,
+    item_list_offset: usize,
+    group_selected_index: usize,
+    group_list_offset: usize,
 }
 
 impl AppState {
@@ -47,18 +58,10 @@ impl AppState {
         let mut state = Self::default();
         if let Some(id) = selected_id {
             if let Some(index) = items.iter().position(|item| item.selection_key() == id) {
-                state.selected_index = index;
+                state.item_selected_index = index;
             }
         }
         state
-    }
-
-    fn filtered_items(&self, items: &[Item]) -> Vec<Item> {
-        items
-            .iter()
-            .filter(|item| item.matches_query(&self.query) && self.matches_group(item))
-            .cloned()
-            .collect()
     }
 
     fn matching_groups(&self, items: &[Item]) -> Vec<String> {
@@ -72,8 +75,43 @@ impl AppState {
             .collect()
     }
 
-    fn matches_group(&self, item: &Item) -> bool {
-        self.matches_group_name(item.group())
+    fn group_options(&self, items: &[Item]) -> Vec<String> {
+        let mut groups = self.matching_groups(items);
+        if self.group_query.trim().is_empty() {
+            groups.insert(0, ALL_GROUP_LABEL.to_owned());
+        }
+        groups
+    }
+
+    fn active_group_selection<'a>(&self, group_options: &'a [String]) -> GroupSelection<'a> {
+        if group_options.is_empty() {
+            return if self.group_query.trim().is_empty() {
+                GroupSelection::All
+            } else {
+                GroupSelection::NoMatch
+            };
+        }
+
+        match group_options
+            .get(self.group_selected_index)
+            .map(String::as_str)
+        {
+            Some(ALL_GROUP_LABEL) => GroupSelection::All,
+            Some(group_name) => GroupSelection::Group(group_name),
+            None => GroupSelection::NoMatch,
+        }
+    }
+
+    fn filtered_items(&self, items: &[Item], group_options: &[String]) -> Vec<Item> {
+        let matching_items = items.iter().filter(|item| item.matches_query(&self.query));
+        match self.active_group_selection(group_options) {
+            GroupSelection::All => matching_items.cloned().collect(),
+            GroupSelection::Group(group_name) => matching_items
+                .filter(|item| item.group() == group_name)
+                .cloned()
+                .collect(),
+            GroupSelection::NoMatch => Vec::new(),
+        }
     }
 
     fn matches_group_name(&self, group_name: &str) -> bool {
@@ -94,70 +132,103 @@ impl AppState {
     }
 
     fn selected_selection_key(&self, filtered: &[Item]) -> Option<String> {
-        filtered.get(self.selected_index).map(Item::selection_key)
+        filtered
+            .get(self.item_selected_index)
+            .map(Item::selection_key)
     }
 
     fn selected_selection_key_for_active_list(
         &self,
         filtered: &[Item],
-        matching_groups: &[String],
+        group_options: &[String],
     ) -> Option<String> {
         match self.active_filter {
             ActiveFilter::Text => self.selected_selection_key(filtered),
-            ActiveFilter::Group => matching_groups.get(self.selected_index).and_then(|group| {
-                filtered
+            ActiveFilter::Group => match self.active_group_selection(group_options) {
+                GroupSelection::All => self
+                    .selected_selection_key(filtered)
+                    .or_else(|| filtered.first().map(Item::selection_key)),
+                GroupSelection::Group(group_name) => filtered
                     .iter()
-                    .find(|item| item.group() == group)
-                    .map(Item::selection_key)
-            }),
+                    .find(|item| item.group() == group_name)
+                    .map(Item::selection_key),
+                GroupSelection::NoMatch => None,
+            },
         }
     }
 
-    fn active_list_len(&self, filtered_len: usize, matching_groups_len: usize) -> usize {
+    fn active_list_len(&self, filtered_len: usize, group_options_len: usize) -> usize {
         match self.active_filter {
             ActiveFilter::Text => filtered_len,
-            ActiveFilter::Group => matching_groups_len,
+            ActiveFilter::Group => group_options_len,
         }
     }
 
-    fn sync_selection(&mut self, filtered_len: usize) {
+    fn sync_item_selection(&mut self, filtered_len: usize) {
         if filtered_len == 0 {
-            self.selected_index = 0;
-            self.list_offset = 0;
+            self.item_selected_index = 0;
+            self.item_list_offset = 0;
             return;
         }
 
-        if self.selected_index >= filtered_len {
-            self.selected_index = filtered_len - 1;
+        if self.item_selected_index >= filtered_len {
+            self.item_selected_index = filtered_len - 1;
         }
     }
 
-    fn move_selection(&mut self, delta: isize, filtered_len: usize) {
-        self.sync_selection(filtered_len);
-        if filtered_len == 0 {
+    fn sync_group_selection(&mut self, group_options_len: usize) {
+        if group_options_len == 0 {
+            self.group_selected_index = 0;
+            self.group_list_offset = 0;
             return;
         }
 
-        let next = (self.selected_index as isize + delta).clamp(0, filtered_len as isize - 1);
-        self.selected_index = next as usize;
+        if self.group_selected_index >= group_options_len {
+            self.group_selected_index = group_options_len - 1;
+        }
+    }
+
+    fn move_selection(&mut self, delta: isize, filtered_len: usize, group_options_len: usize) {
+        let active_list_len = self.active_list_len(filtered_len, group_options_len);
+        match self.active_filter {
+            ActiveFilter::Text => self.sync_item_selection(filtered_len),
+            ActiveFilter::Group => self.sync_group_selection(group_options_len),
+        }
+        if active_list_len == 0 {
+            return;
+        }
+
+        let selected_index = self.active_selected_index_mut();
+        let next = (*selected_index as isize + delta).clamp(0, active_list_len as isize - 1);
+        let changed = *selected_index != next as usize;
+        *selected_index = next as usize;
+        if changed && self.active_filter == ActiveFilter::Group {
+            self.reset_item_selection();
+        }
     }
 
     fn push_char(&mut self, ch: char) {
         self.active_filter_string_mut().push(ch);
-        self.selected_index = 0;
-        self.list_offset = 0;
+        self.reset_active_selection();
+        if self.active_filter == ActiveFilter::Group {
+            self.reset_item_selection();
+        }
     }
 
     fn push_str(&mut self, value: &str) {
         self.active_filter_string_mut().push_str(value);
-        self.selected_index = 0;
-        self.list_offset = 0;
+        self.reset_active_selection();
+        if self.active_filter == ActiveFilter::Group {
+            self.reset_item_selection();
+        }
     }
 
     fn backspace(&mut self) {
         self.active_filter_string_mut().pop();
-        self.selected_index = 0;
-        self.list_offset = 0;
+        self.reset_active_selection();
+        if self.active_filter == ActiveFilter::Group {
+            self.reset_item_selection();
+        }
     }
 
     fn toggle_filter_mode(&mut self) {
@@ -174,21 +245,52 @@ impl AppState {
         }
     }
 
-    fn current_group_label(&self) -> &str {
-        if self.group_query.trim().is_empty() {
-            "All"
-        } else {
-            self.group_query.trim()
+    fn current_group_label(&self, group_options: &[String]) -> String {
+        if !self.group_query.trim().is_empty() {
+            return self.group_query.trim().to_owned();
+        }
+
+        match self.active_group_selection(group_options) {
+            GroupSelection::All | GroupSelection::NoMatch => ALL_GROUP_LABEL.to_owned(),
+            GroupSelection::Group(group_name) => group_name.to_owned(),
         }
     }
 
-    fn build_list_state(&self, filtered_len: usize) -> ListState {
-        if filtered_len == 0 {
+    fn build_list_state(&self, filtered_len: usize, group_options_len: usize) -> ListState {
+        if self.active_list_len(filtered_len, group_options_len) == 0 {
             ListState::default()
         } else {
+            let (offset, selected_index) = match self.active_filter {
+                ActiveFilter::Text => (self.item_list_offset, self.item_selected_index),
+                ActiveFilter::Group => (self.group_list_offset, self.group_selected_index),
+            };
             ListState::default()
-                .with_offset(self.list_offset)
-                .with_selected(Some(self.selected_index))
+                .with_offset(offset)
+                .with_selected(Some(selected_index))
+        }
+    }
+
+    fn reset_active_selection(&mut self) {
+        match self.active_filter {
+            ActiveFilter::Text => self.reset_item_selection(),
+            ActiveFilter::Group => self.reset_group_selection(),
+        }
+    }
+
+    fn reset_item_selection(&mut self) {
+        self.item_selected_index = 0;
+        self.item_list_offset = 0;
+    }
+
+    fn reset_group_selection(&mut self) {
+        self.group_selected_index = 0;
+        self.group_list_offset = 0;
+    }
+
+    fn active_selected_index_mut(&mut self) -> &mut usize {
+        match self.active_filter {
+            ActiveFilter::Text => &mut self.item_selected_index,
+            ActiveFilter::Group => &mut self.group_selected_index,
         }
     }
 }
@@ -255,12 +357,13 @@ pub fn render_to_string_with_layout(
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend)?;
     let mut app = AppState::new(items, selected_id);
-    let filtered = app.filtered_items(items);
-    let matching_groups = app.matching_groups(items);
-    let active_list_len = app.active_list_len(filtered.len(), matching_groups.len());
-    app.sync_selection(active_list_len);
-    let mut list_state = app.build_list_state(active_list_len);
-    let selected_key = app.selected_selection_key_for_active_list(&filtered, &matching_groups);
+    let group_options = app.group_options(items);
+    app.sync_group_selection(group_options.len());
+    let filtered = app.filtered_items(items, &group_options);
+    app.sync_item_selection(filtered.len());
+    let mut list_state = app.build_list_state(filtered.len(), group_options.len());
+    let selected_key = app.selected_selection_key_for_active_list(&filtered, &group_options);
+    let group_label = app.current_group_label(&group_options);
     terminal.draw(|frame| {
         draw_app(
             frame,
@@ -271,8 +374,8 @@ pub fn render_to_string_with_layout(
             keyboard_layout,
             &app.query,
             &app.group_query,
-            app.current_group_label(),
-            &matching_groups,
+            &group_label,
+            &group_options,
             app.active_filter,
             &mut list_state,
         )
@@ -305,6 +408,15 @@ pub fn render_inline_with_layout(
     items: &[Item],
     selected_id: Option<&str>,
 ) -> Result<()> {
+    render_inline_with_layout_and_pipeout(keyboard_layout, items, selected_id, None)
+}
+
+pub fn render_inline_with_layout_and_pipeout(
+    keyboard_layout: &[Vec<KeyboardCell>],
+    items: &[Item],
+    selected_id: Option<&str>,
+    pipeout_command: Option<&str>,
+) -> Result<()> {
     if !crossterm::tty::IsTty::is_tty(&io::stdout()) {
         let width = crossterm::terminal::size()
             .map(|(width, _)| width.max(80))
@@ -323,7 +435,7 @@ pub fn render_inline_with_layout(
         return Ok(());
     }
 
-    run_interactive(keyboard_layout, items, selected_id)
+    run_interactive(keyboard_layout, items, selected_id, pipeout_command)
 }
 
 pub fn select_item_with_layout(
@@ -342,6 +454,7 @@ fn run_interactive(
     keyboard_layout: &[Vec<KeyboardCell>],
     items: &[Item],
     selected_id: Option<&str>,
+    pipeout_command: Option<&str>,
 ) -> Result<()> {
     let viewport = interactive_viewport(STATIC_HEIGHT)?;
     reserve_viewport_lines(viewport.height.saturating_sub(1))?;
@@ -357,6 +470,7 @@ fn run_interactive(
         items,
         selected_id,
         viewport.y,
+        pipeout_command,
     );
 
     let restore_result = (|| -> Result<()> {
@@ -410,17 +524,19 @@ fn run_app(
     items: &[Item],
     selected_id: Option<&str>,
     viewport_top: u16,
+    pipeout_command: Option<&str>,
 ) -> Result<()> {
     let mut app = AppState::new(items, selected_id);
     let mut viewport_top = viewport_top;
 
     loop {
-        let filtered = app.filtered_items(items);
-        let matching_groups = app.matching_groups(items);
-        let active_list_len = app.active_list_len(filtered.len(), matching_groups.len());
-        app.sync_selection(active_list_len);
-        let mut list_state = app.build_list_state(active_list_len);
-        let selected_key = app.selected_selection_key_for_active_list(&filtered, &matching_groups);
+        let group_options = app.group_options(items);
+        app.sync_group_selection(group_options.len());
+        let filtered = app.filtered_items(items, &group_options);
+        app.sync_item_selection(filtered.len());
+        let mut list_state = app.build_list_state(filtered.len(), group_options.len());
+        let selected_key = app.selected_selection_key_for_active_list(&filtered, &group_options);
+        let group_label = app.current_group_label(&group_options);
 
         terminal.draw(|frame| {
             draw_app(
@@ -432,13 +548,16 @@ fn run_app(
                 keyboard_layout,
                 &app.query,
                 &app.group_query,
-                app.current_group_label(),
-                &matching_groups,
+                &group_label,
+                &group_options,
                 app.active_filter,
                 &mut list_state,
             )
         })?;
-        app.list_offset = list_state.offset();
+        match app.active_filter {
+            ActiveFilter::Text => app.item_list_offset = list_state.offset(),
+            ActiveFilter::Group => app.group_list_offset = list_state.offset(),
+        }
 
         if !event::poll(Duration::from_millis(250))? {
             continue;
@@ -449,7 +568,10 @@ fn run_app(
                 if should_quit(&app, key) {
                     return Ok(());
                 }
-                handle_key_event(&mut app, key, active_list_len);
+                if handle_submit_key(key, &filtered, selected_key.as_deref(), pipeout_command)? {
+                    continue;
+                }
+                handle_key_event(&mut app, key, filtered.len(), group_options.len());
             }
             Event::Paste(text) => app.push_str(&text),
             Event::Resize(_, _) => {
@@ -460,6 +582,31 @@ fn run_app(
             _ => {}
         }
     }
+}
+
+fn handle_submit_key(
+    key: KeyEvent,
+    filtered: &[Item],
+    selected_id: Option<&str>,
+    pipeout_command: Option<&str>,
+) -> Result<bool> {
+    if key.code != KeyCode::Enter {
+        return Ok(false);
+    }
+
+    let Some(command) = pipeout_command else {
+        return Ok(true);
+    };
+    let Some(Item::Note(note)) = AppView {
+        items: filtered,
+        selected_id,
+    }
+    .selected() else {
+        return Ok(true);
+    };
+
+    pipeout::write_to_command(command, &note.desc)?;
+    Ok(true)
 }
 
 fn run_selector_app(
@@ -473,12 +620,13 @@ fn run_selector_app(
     let mut viewport_top = viewport_top;
 
     loop {
-        let filtered = app.filtered_items(items);
-        let matching_groups = app.matching_groups(items);
-        let active_list_len = app.active_list_len(filtered.len(), matching_groups.len());
-        app.sync_selection(active_list_len);
-        let mut list_state = app.build_list_state(active_list_len);
-        let selected_key = app.selected_selection_key_for_active_list(&filtered, &matching_groups);
+        let group_options = app.group_options(items);
+        app.sync_group_selection(group_options.len());
+        let filtered = app.filtered_items(items, &group_options);
+        app.sync_item_selection(filtered.len());
+        let mut list_state = app.build_list_state(filtered.len(), group_options.len());
+        let selected_key = app.selected_selection_key_for_active_list(&filtered, &group_options);
+        let group_label = app.current_group_label(&group_options);
 
         terminal.draw(|frame| {
             draw_app(
@@ -490,13 +638,16 @@ fn run_selector_app(
                 keyboard_layout,
                 &app.query,
                 &app.group_query,
-                app.current_group_label(),
-                &matching_groups,
+                &group_label,
+                &group_options,
                 app.active_filter,
                 &mut list_state,
             )
         })?;
-        app.list_offset = list_state.offset();
+        match app.active_filter {
+            ActiveFilter::Text => app.item_list_offset = list_state.offset(),
+            ActiveFilter::Group => app.group_list_offset = list_state.offset(),
+        }
 
         if !event::poll(Duration::from_millis(250))? {
             continue;
@@ -504,7 +655,7 @@ fn run_selector_app(
 
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
-                match handle_selector_key_event(&mut app, key, &filtered, &matching_groups) {
+                match handle_selector_key_event(&mut app, key, &filtered, &group_options) {
                     SelectorAction::Continue => {}
                     SelectorAction::Accept(selection) => return Ok(Some(selection)),
                     SelectorAction::Cancel => return Ok(None),
@@ -580,14 +731,14 @@ fn handle_selector_key_event(
     app: &mut AppState,
     key: KeyEvent,
     filtered: &[Item],
-    matching_groups: &[String],
+    group_options: &[String],
 ) -> SelectorAction {
     match key {
         KeyEvent {
             code: KeyCode::Enter,
             ..
         } => app
-            .selected_selection_key_for_active_list(filtered, matching_groups)
+            .selected_selection_key_for_active_list(filtered, group_options)
             .map(SelectorAction::Accept)
             .unwrap_or(SelectorAction::Continue),
         KeyEvent {
@@ -603,36 +754,40 @@ fn handle_selector_key_event(
             SelectorAction::Cancel
         }
         _ => {
-            let active_list_len = app.active_list_len(filtered.len(), matching_groups.len());
-            handle_key_event(app, key, active_list_len);
+            handle_key_event(app, key, filtered.len(), group_options.len());
             SelectorAction::Continue
         }
     }
 }
 
-fn handle_key_event(app: &mut AppState, key: KeyEvent, filtered_len: usize) {
+fn handle_key_event(
+    app: &mut AppState,
+    key: KeyEvent,
+    filtered_len: usize,
+    group_options_len: usize,
+) {
     match key.code {
         KeyCode::Tab => app.toggle_filter_mode(),
         KeyCode::Backspace => app.backspace(),
         KeyCode::Char('n') | KeyCode::Char('N')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
-            app.move_selection(1, filtered_len);
+            app.move_selection(1, filtered_len, group_options_len);
         }
         KeyCode::Char('p') | KeyCode::Char('P')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
-            app.move_selection(-1, filtered_len);
+            app.move_selection(-1, filtered_len, group_options_len);
         }
         KeyCode::Char('d') | KeyCode::Char('D')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
-            app.move_selection(5, filtered_len);
+            app.move_selection(5, filtered_len, group_options_len);
         }
         KeyCode::Char('u') | KeyCode::Char('U')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
-            app.move_selection(-5, filtered_len);
+            app.move_selection(-5, filtered_len, group_options_len);
         }
         KeyCode::Char(ch)
             if !key.modifiers.contains(KeyModifiers::CONTROL)
@@ -641,16 +796,23 @@ fn handle_key_event(app: &mut AppState, key: KeyEvent, filtered_len: usize) {
         {
             app.push_char(ch);
         }
-        KeyCode::Up => app.move_selection(-1, filtered_len),
-        KeyCode::Down => app.move_selection(1, filtered_len),
-        KeyCode::PageUp => app.move_selection(-5, filtered_len),
-        KeyCode::PageDown => app.move_selection(5, filtered_len),
+        KeyCode::Up => app.move_selection(-1, filtered_len, group_options_len),
+        KeyCode::Down => app.move_selection(1, filtered_len, group_options_len),
+        KeyCode::PageUp => app.move_selection(-5, filtered_len, group_options_len),
+        KeyCode::PageDown => app.move_selection(5, filtered_len, group_options_len),
         KeyCode::Home => {
-            app.selected_index = 0;
+            app.reset_active_selection();
+            if app.active_filter == ActiveFilter::Group {
+                app.reset_item_selection();
+            }
         }
         KeyCode::End => {
-            if filtered_len > 0 {
-                app.selected_index = filtered_len - 1;
+            let active_list_len = app.active_list_len(filtered_len, group_options_len);
+            if active_list_len > 0 {
+                *app.active_selected_index_mut() = active_list_len - 1;
+                if app.active_filter == ActiveFilter::Group {
+                    app.reset_item_selection();
+                }
             }
         }
         _ => {}
@@ -664,7 +826,7 @@ fn draw_app(
     query: &str,
     group_query: &str,
     group_label: &str,
-    matching_groups: &[String],
+    group_options: &[String],
     active_filter: ActiveFilter,
     list_state: &mut ListState,
 ) {
@@ -745,13 +907,13 @@ fn draw_app(
 
     match active_filter {
         ActiveFilter::Group => {
-            let groups = if matching_groups.is_empty() {
+            let groups = if group_options.is_empty() {
                 vec![ListItem::new(Line::from(vec![Span::styled(
                     "No groups match the current filter.",
                     Style::default().fg(Color::DarkGray),
                 )]))]
             } else {
-                matching_groups
+                group_options
                     .iter()
                     .map(|group| ListItem::new(Line::from(group.clone())))
                     .collect::<Vec<_>>()
@@ -851,8 +1013,9 @@ fn selected_detail(app: AppView<'_>) -> Vec<Line<'static>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ActiveFilter, AppState, SelectorAction, calculate_viewport, format_note_label,
-        handle_key_event, handle_selector_key_event, should_quit,
+        ALL_GROUP_LABEL, ActiveFilter, AppState, GroupSelection, SelectorAction,
+        calculate_viewport, format_note_label, handle_key_event, handle_selector_key_event,
+        handle_submit_key, should_quit,
     };
     use crate::model::{Item, Note, Shortcut};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -866,8 +1029,9 @@ mod tests {
         ];
         let mut app = AppState::default();
         app.push_str("note");
+        let group_options = app.group_options(&items);
 
-        let filtered = app.filtered_items(&items);
+        let filtered = app.filtered_items(&items, &group_options);
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].id(), "tip");
@@ -883,8 +1047,9 @@ mod tests {
             group_query: "wk".to_owned(),
             ..AppState::default()
         };
+        let group_options = app.group_options(&items);
 
-        let filtered = app.filtered_items(&items);
+        let filtered = app.filtered_items(&items, &group_options);
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].group(), "wkey");
@@ -926,15 +1091,31 @@ mod tests {
     }
 
     #[test]
+    fn group_options_with_empty_query_include_all_first() {
+        let items = vec![
+            Item::Shortcut(Shortcut::new("copy", "Ctrl+C", "Copy selection", "shell")),
+            Item::Note(Note::new("tip", "Use !!", "wkey")),
+        ];
+        let app = AppState {
+            active_filter: ActiveFilter::Group,
+            ..AppState::default()
+        };
+
+        let group_options = app.group_options(&items);
+
+        assert_eq!(group_options, vec!["All", "shell", "wkey"]);
+    }
+
+    #[test]
     fn group_mode_selection_uses_matching_group_index() {
         let filtered = vec![
             Item::Shortcut(Shortcut::new("copy", "Ctrl+C", "Copy selection", "shell")),
             Item::Note(Note::new("tip", "Use !!", "wkey")),
         ];
-        let groups = vec!["shell".to_owned(), "wkey".to_owned()];
+        let groups = vec!["All".to_owned(), "shell".to_owned(), "wkey".to_owned()];
         let app = AppState {
             active_filter: ActiveFilter::Group,
-            selected_index: 1,
+            group_selected_index: 2,
             ..AppState::default()
         };
 
@@ -960,8 +1141,9 @@ mod tests {
             active_filter: ActiveFilter::Group,
             ..AppState::default()
         };
+        let group_options = app.group_options(&items);
 
-        let filtered = app.filtered_items(&items);
+        let filtered = app.filtered_items(&items, &group_options);
 
         assert_eq!(filtered.len(), 1);
     }
@@ -979,8 +1161,9 @@ mod tests {
             active_filter: ActiveFilter::Group,
             ..AppState::default()
         };
+        let group_options = app.group_options(&items);
 
-        let filtered = app.filtered_items(&items);
+        let filtered = app.filtered_items(&items, &group_options);
 
         assert_eq!(filtered.len(), 1);
     }
@@ -988,8 +1171,21 @@ mod tests {
     #[test]
     fn empty_group_filter_shows_all_groups_label() {
         let app = AppState::default();
+        let group_options = vec![ALL_GROUP_LABEL.to_owned()];
 
-        assert_eq!(app.current_group_label(), "All");
+        assert_eq!(app.current_group_label(&group_options), ALL_GROUP_LABEL);
+    }
+
+    #[test]
+    fn empty_group_filter_shows_selected_group_label_after_navigation() {
+        let app = AppState {
+            active_filter: ActiveFilter::Group,
+            group_selected_index: 1,
+            ..AppState::default()
+        };
+        let group_options = vec!["All".to_owned(), "shell".to_owned(), "wkey".to_owned()];
+
+        assert_eq!(app.current_group_label(&group_options), "shell");
     }
 
     #[test]
@@ -1011,13 +1207,15 @@ mod tests {
             query: String::new(),
             group_query: String::new(),
             active_filter: ActiveFilter::Text,
-            selected_index: 4,
-            list_offset: 0,
+            item_selected_index: 4,
+            item_list_offset: 0,
+            group_selected_index: 0,
+            group_list_offset: 0,
         };
 
-        app.sync_selection(2);
+        app.sync_item_selection(2);
 
-        assert_eq!(app.selected_index, 1);
+        assert_eq!(app.item_selected_index, 1);
     }
 
     #[test]
@@ -1028,15 +1226,16 @@ mod tests {
             &mut app,
             KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
             12,
+            0,
         );
 
-        assert_eq!(app.selected_index, 5);
+        assert_eq!(app.item_selected_index, 5);
     }
 
     #[test]
     fn ctrl_u_moves_selection_up_by_a_page() {
         let mut app = AppState {
-            selected_index: 7,
+            item_selected_index: 7,
             ..AppState::default()
         };
 
@@ -1044,9 +1243,64 @@ mod tests {
             &mut app,
             KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
             12,
+            0,
         );
 
-        assert_eq!(app.selected_index, 2);
+        assert_eq!(app.item_selected_index, 2);
+    }
+
+    #[test]
+    fn group_navigation_auto_applies_selected_group() {
+        let items = vec![
+            Item::Shortcut(Shortcut::new("copy", "Ctrl+C", "Copy selection", "shell")),
+            Item::Note(Note::new("tip", "Use !!", "wkey")),
+        ];
+        let mut app = AppState {
+            active_filter: ActiveFilter::Group,
+            ..AppState::default()
+        };
+
+        handle_key_event(
+            &mut app,
+            KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            items.len(),
+            3,
+        );
+        let group_options = app.group_options(&items);
+        let filtered = app.filtered_items(&items, &group_options);
+
+        assert_eq!(
+            app.active_group_selection(&group_options),
+            GroupSelection::Group("shell")
+        );
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].group(), "shell");
+    }
+
+    fn shell_quote(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "'\\''"))
+    }
+
+    #[test]
+    fn enter_on_selected_note_pipes_desc_to_command() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("note.txt");
+        let command = format!("cat > {}", shell_quote(&output_path.display().to_string()));
+        let filtered = vec![Item::Note(Note::new("tip", "Remember this", "shell"))];
+
+        let handled = handle_submit_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &filtered,
+            Some("note\u{1f}shell\u{1f}tip"),
+            Some(&command),
+        )
+        .unwrap();
+
+        assert!(handled);
+        assert_eq!(
+            std::fs::read_to_string(output_path).unwrap(),
+            "Remember this"
+        );
     }
 
     #[test]

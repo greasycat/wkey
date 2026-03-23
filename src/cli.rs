@@ -61,7 +61,7 @@ Examples:
 #[command(
     name = "wkey",
     about = "Interactive terminal cheatsheet for keyboard shortcuts and notes.",
-    long_about = "wkey opens an interactive keyboard cheatsheet from TOML files loaded from the XDG config directory.\n\nDefault config layout:\n  keyboard.txt\n  groups/<group>.toml\n\nRun without subcommands to open the TUI. Use `--search` to preselect an item through fzf when available, or through the built-in selector fallback when fzf cannot be launched. Use `init` to bootstrap the config directory.",
+    long_about = "wkey opens an interactive keyboard cheatsheet from TOML files loaded from the XDG config directory.\n\nDefault config layout:\n  config.toml\n  keyboard.txt\n  groups/<group>.toml\n\nRun without subcommands to open the TUI. Use `--search` to preselect an item through fzf when available, or through the built-in selector fallback when fzf cannot be launched. Use `init` to bootstrap the config directory.",
     after_long_help = TOP_LEVEL_EXAMPLES
 )]
 pub struct Cli {
@@ -82,7 +82,7 @@ pub struct Cli {
         global = true,
         value_name = "PATH",
         help = "Override the config directory instead of using XDG",
-        long_help = "Override the config directory instead of using the XDG config location. When set, `wkey` reads and writes `keyboard.txt` and `groups/*.toml` under this directory."
+        long_help = "Override the config directory instead of using the XDG config location. When set, `wkey` reads and writes `config.toml`, `keyboard.txt`, and `groups/*.toml` under this directory."
     )]
     pub config_dir: Option<PathBuf>,
 
@@ -100,8 +100,8 @@ pub struct Cli {
 pub enum Command {
     #[command(
         visible_alias = "i",
-        about = "Create the default keyboard layout and bundled wkey help group",
-        long_about = "Bootstrap the config directory by writing `keyboard.txt` and `groups/wkey.toml`. Existing files are preserved unless `--yes` is provided."
+        about = "Create the default app config, keyboard layout, and bundled wkey help group",
+        long_about = "Bootstrap the config directory by writing `config.toml`, `keyboard.txt`, and `groups/wkey.toml`. Existing files are preserved unless `--yes` is provided."
     )]
     Init(InitArgs),
     #[command(
@@ -138,7 +138,7 @@ pub struct InitArgs {
     #[arg(
         short = 'y',
         long,
-        help = "Overwrite existing keyboard.txt and groups/wkey.toml without prompting"
+        help = "Overwrite existing config.toml, keyboard.txt, and groups/wkey.toml without prompting"
     )]
     pub yes: bool,
 }

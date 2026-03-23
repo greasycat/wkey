@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const APP_TITLE: &str = "wkey";
+pub const DEFAULT_APP_CONFIG_TEXT: &str = include_str!("../assets/default-config.toml");
 pub const DEFAULT_KEYBOARD_LAYOUT_TEXT: &str = include_str!("../assets/default-keyboard.txt");
 pub const DEFAULT_GROUP_NAME: &str = "wkey";
 pub const DEFAULT_WKEY_GROUP_TEXT: &str = include_str!("../assets/default-wkey-group.toml");
@@ -21,6 +22,29 @@ pub enum KeyboardCell {
 pub struct LoadedConfig {
     pub items: Vec<Item>,
     pub keyboard_layout: Vec<Vec<KeyboardCell>>,
+    pub app: AppConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+pub struct AppConfig {
+    #[serde(default)]
+    pub pipeout: PipeoutConfig,
+}
+
+impl AppConfig {
+    pub fn pipeout_command(&self) -> Option<&str> {
+        self.pipeout
+            .command
+            .as_deref()
+            .map(str::trim)
+            .filter(|command| !command.is_empty())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+pub struct PipeoutConfig {
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,10 +96,12 @@ pub fn load(cli_override: Option<&Path>, xdg_override: Option<&Path>) -> Result<
     let root = resolve_config_root(cli_override, xdg_override)?;
     let keyboard_layout = load_keyboard_layout(&root)?;
     let items = load_all_items(&root)?;
+    let app = load_app_config(&root)?;
 
     Ok(LoadedConfig {
         items,
         keyboard_layout,
+        app,
     })
 }
 
@@ -90,6 +116,13 @@ pub fn keyboard_layout_path(
     Ok(resolve_config_root(cli_override, xdg_override)?.join("keyboard.txt"))
 }
 
+pub fn app_config_path(
+    cli_override: Option<&Path>,
+    xdg_override: Option<&Path>,
+) -> Result<PathBuf> {
+    Ok(resolve_config_root(cli_override, xdg_override)?.join("config.toml"))
+}
+
 pub fn groups_dir_path(
     cli_override: Option<&Path>,
     xdg_override: Option<&Path>,
@@ -102,6 +135,14 @@ pub fn write_default_keyboard_layout(path: &Path) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, DEFAULT_KEYBOARD_LAYOUT_TEXT)?;
+    Ok(())
+}
+
+pub fn write_default_app_config(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, DEFAULT_APP_CONFIG_TEXT)?;
     Ok(())
 }
 
@@ -491,6 +532,15 @@ fn load_keyboard_layout(root: &Path) -> Result<Vec<Vec<KeyboardCell>>> {
     }
 }
 
+fn load_app_config(root: &Path) -> Result<AppConfig> {
+    let path = root.join("config.toml");
+    if !path.exists() {
+        return Ok(AppConfig::default());
+    }
+
+    Ok(toml::from_str(&fs::read_to_string(path)?)?)
+}
+
 fn parse_keyboard_layout(source: &str) -> Vec<Vec<KeyboardCell>> {
     source
         .lines()
@@ -687,8 +737,9 @@ fn resolve_config_root(
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_GROUP_NAME, DEFAULT_WKEY_GROUP_TEXT, GroupFile, KeyboardCell, NoteEntry,
-        ShortcutEntry, default_keyboard_layout, parse_keyboard_layout, render_group_file,
+        DEFAULT_APP_CONFIG_TEXT, DEFAULT_GROUP_NAME, DEFAULT_WKEY_GROUP_TEXT, GroupFile,
+        KeyboardCell, NoteEntry, ShortcutEntry, default_keyboard_layout, parse_keyboard_layout,
+        render_group_file,
     };
     use std::collections::BTreeMap;
 
@@ -746,5 +797,12 @@ mod tests {
         assert!(parsed.shortcuts.contains_key("quit"));
         assert!(parsed.notes.contains_key("run"));
         assert!(DEFAULT_GROUP_NAME == "wkey");
+    }
+
+    #[test]
+    fn bundled_default_app_config_parses() {
+        let parsed: super::AppConfig = toml::from_str(DEFAULT_APP_CONFIG_TEXT).unwrap();
+
+        assert_eq!(parsed.pipeout_command(), None);
     }
 }

@@ -71,3 +71,44 @@ fn load_reads_keyboard_layout_from_keyboard_txt() {
         ]
     );
 }
+
+#[test]
+fn load_reads_pipeout_command_from_config_toml() {
+    let temp = tempfile::tempdir().unwrap();
+    let config_home = temp.path().join("xdg");
+    let app_dir = config_home.join("wkey");
+    std::fs::create_dir_all(app_dir.join("groups")).unwrap();
+
+    std::fs::write(
+        app_dir.join("groups/shell.toml"),
+        "[shortcuts]\n\n[notes]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app_dir.join("config.toml"),
+        "[pipeout]\ncommand = \"wl-copy\"\n",
+    )
+    .unwrap();
+
+    let loaded = wkey::config::load(None, Some(config_home.as_path())).unwrap();
+
+    assert_eq!(loaded.app.pipeout_command(), Some("wl-copy"));
+}
+
+#[test]
+fn load_defaults_pipeout_to_none_when_config_toml_is_missing() {
+    let temp = tempfile::tempdir().unwrap();
+    let config_home = temp.path().join("xdg");
+    let app_dir = config_home.join("wkey");
+    std::fs::create_dir_all(app_dir.join("groups")).unwrap();
+
+    std::fs::write(
+        app_dir.join("groups/shell.toml"),
+        "[shortcuts]\n\n[notes]\n",
+    )
+    .unwrap();
+
+    let loaded = wkey::config::load(None, Some(config_home.as_path())).unwrap();
+
+    assert_eq!(loaded.app.pipeout_command(), None);
+}

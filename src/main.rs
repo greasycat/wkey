@@ -141,17 +141,26 @@ fn run_tui(config_dir: Option<&Path>, search_enabled: bool) -> Result<()> {
         None
     };
 
-    ui::render_inline_with_layout(
+    ui::render_inline_with_layout_and_pipeout(
         &loaded.keyboard_layout,
         &loaded.items,
         selected_id.as_deref(),
+        loaded.app.pipeout_command(),
     )
 }
 
 fn init_config(config_dir: Option<&Path>, yes: bool) -> Result<()> {
+    let app_config_path = config::app_config_path(config_dir, None)?;
     let keyboard_path = config::keyboard_layout_path(config_dir, None)?;
     let groups_dir = config::groups_dir_path(config_dir, None)?;
     let default_group_path = groups_dir.join(format!("{}.toml", wkey::config::DEFAULT_GROUP_NAME));
+
+    if should_write(&app_config_path, yes)? {
+        config::write_default_app_config(&app_config_path)?;
+        println!("Wrote {}", app_config_path.display());
+    } else {
+        println!("Skipped {}", app_config_path.display());
+    }
 
     if should_write(&keyboard_path, yes)? {
         config::write_default_keyboard_layout(&keyboard_path)?;

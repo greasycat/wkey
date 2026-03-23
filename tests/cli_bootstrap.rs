@@ -31,7 +31,7 @@ fn help_mentions_subcommands_and_config_dir() {
 }
 
 #[test]
-fn init_writes_default_keyboard_layout_and_group() {
+fn init_writes_default_app_config_keyboard_layout_and_group() {
     let temp = tempfile::tempdir().unwrap();
     let config_dir = temp.path().join("config");
 
@@ -43,10 +43,15 @@ fn init_writes_default_keyboard_layout_and_group() {
         .arg("--yes")
         .assert()
         .success()
+        .stdout(predicate::str::contains("config.toml"))
         .stdout(predicate::str::contains("keyboard.txt"))
         .stdout(predicate::str::contains("groups"))
         .stdout(predicate::str::contains("groups/wkey.toml"));
 
+    assert_eq!(
+        fs::read_to_string(config_dir.join("config.toml")).unwrap(),
+        wkey::config::DEFAULT_APP_CONFIG_TEXT
+    );
     assert_eq!(
         fs::read_to_string(config_dir.join("keyboard.txt")).unwrap(),
         wkey::config::DEFAULT_KEYBOARD_LAYOUT_TEXT

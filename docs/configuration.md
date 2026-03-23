@@ -8,6 +8,7 @@ By default, `wkey` uses:
 
 ```text
 $XDG_CONFIG_HOME/wkey/
+  config.toml      # Optional app settings
   keyboard.txt
   groups/
     wkey.toml       # Example
@@ -50,6 +51,23 @@ Formatting rules:
 - Empty lines are ignored
 - Comment lines starting with `#` are ignored
 
+## `config.toml`
+
+If `config.toml` exists, `wkey` reads optional app-level settings from it.
+
+Example:
+
+```toml
+[pipeout]
+command = "wl-copy"
+```
+
+Behavior:
+
+- When `pipeout.command` is set, pressing `Enter` on a selected note in the TUI writes the note description to the command's stdin
+- When it is missing or empty, `Enter` does nothing
+- The command is executed through `sh -c`, so shell syntax is allowed
+
 ## Group Files
 
 Each file under `groups/*.toml` contains shortcuts and notes for one group.
@@ -67,7 +85,7 @@ prompt-tip = { desc = "Use !! to repeat the previous command" }
 
 ## Bundled Default Group
 
-`wkey init` creates `groups/wkey.toml`, a built-in group that documents the app's own TUI bindings and CLI usage.
+`wkey init` creates `config.toml`, `keyboard.txt`, and `groups/wkey.toml`. The bundled `wkey.toml` group documents the app's own TUI bindings and CLI usage.
 
 ## Related Docs
 

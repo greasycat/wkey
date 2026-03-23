@@ -47,12 +47,21 @@ This creates:
 
 ```text
 $XDG_CONFIG_HOME/wkey/
+  config.toml
   keyboard.txt
   groups/
     wkey.toml
 ```
 
 The bundled `wkey.toml` group gives a fresh install something useful to browse immediately.
+
+`wkey init` now creates a default `config.toml` too. Optional clipboard-style note pipeout:
+
+```toml
+# $XDG_CONFIG_HOME/wkey/config.toml
+[pipeout]
+command = "wl-copy"
+```
 
 ## Add Your First Items
 

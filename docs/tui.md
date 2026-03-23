@@ -20,6 +20,7 @@ Run `wkey` with no subcommand to open the interactive interface.
 - `Ctrl-U` / `Ctrl-D` jumps by a page
 - `Home` / `End` moves to the start or end
 - `Backspace` removes characters from the active filter
+- `Enter` sends the selected note text to the configured `pipeout` command, if one is set
 - `Ctrl-C` quits
 
 ## Search Before Opening the TUI
