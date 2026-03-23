@@ -9,6 +9,7 @@ pub const APP_TITLE: &str = "wkey";
 pub const DEFAULT_KEYBOARD_LAYOUT_TEXT: &str = include_str!("../assets/default-keyboard.txt");
 pub const DEFAULT_GROUP_NAME: &str = "wkey";
 pub const DEFAULT_WKEY_GROUP_TEXT: &str = include_str!("../assets/default-wkey-group.toml");
+pub const DEFAULT_FZF_LAYOUT: &str = "reverse";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyboardCell {

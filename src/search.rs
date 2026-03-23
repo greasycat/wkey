@@ -1,3 +1,4 @@
+use crate::config::DEFAULT_FZF_LAYOUT;
 use crate::model::{Item, ItemKind};
 use anyhow::{Result, anyhow};
 use std::io::{ErrorKind, Write};
@@ -65,6 +66,8 @@ fn run_fzf(items: &[Item], fzf_bin: &Path) -> std::result::Result<Option<String>
             "\t",
             "--with-nth",
             "2..",
+            "--layout",
+            DEFAULT_FZF_LAYOUT,
             "--prompt",
             "wkey> ",
         ])
