@@ -37,12 +37,20 @@ Or:
 wkey -s
 ```
 
+Run only the selector:
+
+```bash
+wkey --search-only
+wkey -S
+```
+
 Behavior:
 
 - If `fzf` can be launched, `wkey` uses it for the initial selection step
 - `fzf` is launched with reverse layout by default
 - If `fzf` is unavailable, `wkey` falls back to an internal selector
 - If the selector is cancelled, `wkey` opens the TUI without a preselected item
+- `wkey --search-only` prints the selected item key and exits without opening the main TUI
 
 ## Related Docs
 

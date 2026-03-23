@@ -11,9 +11,11 @@ fn help_mentions_subcommands_and_config_dir() {
         .assert()
         .success()
         .stdout(predicate::str::contains("-s, --search"))
+        .stdout(predicate::str::contains("-S, --search-only"))
         .stdout(predicate::str::contains("-C, --config-dir <PATH>"))
         .stdout(predicate::str::contains("-j, --json"))
         .stdout(predicate::str::contains("--search"))
+        .stdout(predicate::str::contains("--search-only"))
         .stdout(predicate::str::contains("--config-dir"))
         .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("group files [aliases: g]"))
@@ -27,6 +29,7 @@ fn help_mentions_subcommands_and_config_dir() {
         .stdout(predicate::str::contains("wkey g l"))
         .stdout(predicate::str::contains("wkey s l -a"))
         .stdout(predicate::str::contains("wkey --search"))
+        .stdout(predicate::str::contains("wkey --search-only"))
         .stdout(predicate::str::contains("wkey shortcut list --json"));
 }
 

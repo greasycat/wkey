@@ -104,6 +104,12 @@ Alias form:
 wkey -s
 ```
 
+Run only the selector and print the selected item key:
+
+```bash
+wkey --search-only
+```
+
 ## Next Steps
 
 - For config files and layout format, see [Configuration](configuration.md).

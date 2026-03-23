@@ -39,7 +39,11 @@ fn main() -> Result<()> {
                 !cli.json,
                 "--json is only supported for group, shortcut, and note commands"
             );
-            run_tui(cli.config_dir.as_deref(), cli.search)
+            if cli.search_only {
+                run_search_only(cli.config_dir.as_deref())
+            } else {
+                run_tui(cli.config_dir.as_deref(), cli.search)
+            }
         }
     }
 }
@@ -132,11 +136,8 @@ impl From<&Item> for JsonItem {
 
 fn run_tui(config_dir: Option<&Path>, search_enabled: bool) -> Result<()> {
     let loaded = config::load(config_dir, None)?;
-
     let selected_id = if search_enabled {
-        search::search_items_with_fallback(&loaded.items, Path::new("fzf"), |items| {
-            ui::select_item_with_layout(&loaded.keyboard_layout, items, None)
-        })?
+        select_item_id(&loaded)?
     } else {
         None
     };
@@ -147,6 +148,20 @@ fn run_tui(config_dir: Option<&Path>, search_enabled: bool) -> Result<()> {
         selected_id.as_deref(),
         loaded.app.pipeout_command(),
     )
+}
+
+fn run_search_only(config_dir: Option<&Path>) -> Result<()> {
+    let loaded = config::load(config_dir, None)?;
+    if let Some(selected_id) = select_item_id(&loaded)? {
+        println!("{selected_id}");
+    }
+    Ok(())
+}
+
+fn select_item_id(loaded: &config::LoadedConfig) -> Result<Option<String>> {
+    search::search_items_with_fallback(&loaded.items, Path::new("fzf"), |items| {
+        ui::select_item_with_layout(&loaded.keyboard_layout, items, None)
+    })
 }
 
 fn init_config(config_dir: Option<&Path>, yes: bool) -> Result<()> {

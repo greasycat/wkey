@@ -10,10 +10,16 @@
 ## Global Flags
 
 - `--search`, `-s`
+- `--search-only`, `-S`
 - `--config-dir <PATH>`, `-C <PATH>`
 - `--json`, `-j`
 
 Use `wkey --help` or `wkey <command> --help` for generated help with examples.
+
+Selector behavior:
+
+- `wkey --search` opens the selector first, then launches the main TUI with the chosen item preselected
+- `wkey --search-only` runs only the selector, prints the selected item key, and exits
 
 ## Group Commands
 
@@ -194,6 +200,7 @@ JSON is supported for non-interactive data commands only. It is not supported fo
 
 - `wkey` TUI launch
 - `wkey --search`
+- `wkey --search-only`
 - `wkey init`
 
 ### Output Shapes
