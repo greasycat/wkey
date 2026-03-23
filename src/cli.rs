@@ -63,7 +63,7 @@ Examples:
 #[command(
     name = "wkey",
     about = "Interactive terminal cheatsheet for keyboard shortcuts and notes.",
-    long_about = "wkey opens an interactive keyboard cheatsheet from TOML files loaded from the XDG config directory.\n\nDefault config layout:\n  config.toml\n  keyboard.txt\n  groups/<group>.toml\n\nRun without subcommands to open the TUI. Use `--search` to preselect an item through fzf when available, or through the built-in selector fallback when fzf cannot be launched. Use `--search-only` to run only the selector and print the selected item key. Use `init` to bootstrap the config directory.",
+    long_about = "wkey opens an interactive keyboard cheatsheet from TOML files loaded from the XDG config directory.\n\nDefault config layout:\n  config.toml\n  keyboard.txt\n  groups/<group>.toml\n\nRun without subcommands to open the TUI. Use `--search` to preselect an item through fzf when available, or through the built-in selector fallback when fzf cannot be launched. Use `--search-only` to run only the selector and print the selected item's description. Use `init` to bootstrap the config directory.",
     after_long_help = TOP_LEVEL_EXAMPLES
 )]
 pub struct Cli {
@@ -82,8 +82,8 @@ pub struct Cli {
         short = 'S',
         long = "search-only",
         conflicts_with = "search",
-        help = "Run only the selector and print the selected item key",
-        long_help = "Run the item selector without opening the main TUI. Uses `fzf` when it can be launched, and falls back to the built-in selector when `fzf` is unavailable. Prints the selected item key to stdout and exits."
+        help = "Run only the selector and print the selected item's description",
+        long_help = "Run the item selector without opening the main TUI. Uses `fzf` when it can be launched, and falls back to the built-in selector when `fzf` is unavailable. Prints the selected item's description to stdout and exits."
     )]
     pub search_only: bool,
 

@@ -50,7 +50,8 @@ Behavior:
 - `fzf` is launched with reverse layout by default
 - If `fzf` is unavailable, `wkey` falls back to an internal selector
 - If the selector is cancelled, `wkey` opens the TUI without a preselected item
-- `wkey --search-only` prints the selected item key and exits without opening the main TUI
+- `wkey --search-only` prints the selected item's description and exits without opening the main TUI
+- If `pipeout.command` is configured, `wkey --search-only` also sends that selected description to the pipeout command
 
 ## Related Docs
 

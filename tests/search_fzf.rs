@@ -57,6 +57,8 @@ fn search_items_invokes_fzf_with_top_aligned_layout() {
     assert_eq!(selected.as_deref(), Some("note\u{1f}shell\u{1f}tip"));
     assert!(args.lines().any(|line| line == "--layout"));
     assert!(args.lines().any(|line| line == "reverse"));
+    assert!(args.lines().any(|line| line == "--with-nth"));
+    assert!(args.lines().any(|line| line == "2.."));
 }
 
 #[test]

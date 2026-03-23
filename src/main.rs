@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use wkey::config::{self, NotePatch, ShortcutPatch};
 use wkey::model::{Item, Note, Shortcut};
-use wkey::{search, ui};
+use wkey::{pipeout, search, ui};
 
 fn main() -> Result<()> {
     let raw_args = std::env::args_os().collect::<Vec<_>>();
@@ -153,7 +153,11 @@ fn run_tui(config_dir: Option<&Path>, search_enabled: bool) -> Result<()> {
 fn run_search_only(config_dir: Option<&Path>) -> Result<()> {
     let loaded = config::load(config_dir, None)?;
     if let Some(selected_id) = select_item_id(&loaded)? {
-        println!("{selected_id}");
+        let selected_desc = selected_desc(&loaded, &selected_id)?;
+        if let Some(command) = loaded.app.pipeout_command() {
+            pipeout::write_to_command(command, selected_desc)?;
+        }
+        println!("{selected_desc}");
     }
     Ok(())
 }
@@ -162,6 +166,15 @@ fn select_item_id(loaded: &config::LoadedConfig) -> Result<Option<String>> {
     search::search_items_with_fallback(&loaded.items, Path::new("fzf"), |items| {
         ui::select_item_with_layout(&loaded.keyboard_layout, items, None)
     })
+}
+
+fn selected_desc<'a>(loaded: &'a config::LoadedConfig, selected_id: &str) -> Result<&'a str> {
+    loaded
+        .items
+        .iter()
+        .find(|item| item.selection_key() == selected_id)
+        .map(Item::desc)
+        .with_context(|| format!("selected item '{selected_id}' was not found"))
 }
 
 fn init_config(config_dir: Option<&Path>, yes: bool) -> Result<()> {

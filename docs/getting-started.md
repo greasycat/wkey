@@ -104,11 +104,13 @@ Alias form:
 wkey -s
 ```
 
-Run only the selector and print the selected item key:
+Run only the selector and print the selected item's description:
 
 ```bash
 wkey --search-only
 ```
+
+If `pipeout.command` is configured, `wkey --search-only` also sends that selected description to the pipeout command.
 
 ## Next Steps
 

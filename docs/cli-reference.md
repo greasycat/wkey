@@ -19,7 +19,8 @@ Use `wkey --help` or `wkey <command> --help` for generated help with examples.
 Selector behavior:
 
 - `wkey --search` opens the selector first, then launches the main TUI with the chosen item preselected
-- `wkey --search-only` runs only the selector, prints the selected item key, and exits
+- `wkey --search-only` runs only the selector, prints the selected item's description, and exits
+- If `pipeout.command` is configured, `wkey --search-only` also writes that selected description to the pipeout command
 
 ## Group Commands
 
