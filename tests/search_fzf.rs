@@ -7,7 +7,7 @@ fn search_items_returns_selected_item_key_from_fzf_output() {
     let fake_fzf = temp.path().join("fake-fzf");
     fs::write(
         &fake_fzf,
-        "#!/bin/sh\nprintf 'note\\x1fshell\\x1ftip\\tnote\\tshell\\t\\tRemember this\\n'",
+        "#!/bin/sh\nprintf 'note\\037shell\\037tip\\tnote\\tshell\\t\\tRemember this\\n'",
     )
     .unwrap();
 
