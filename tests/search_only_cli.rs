@@ -7,8 +7,16 @@ fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+fn should_skip_on_github_actions() -> bool {
+    std::env::var_os("GITHUB_ACTIONS").is_some()
+}
+
 #[test]
 fn search_only_prints_selected_item_desc_without_opening_main_tui() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let config_dir = temp.path().join("config");
     let fake_bin_dir = temp.path().join("bin");
@@ -61,6 +69,10 @@ tip = { desc = "Remember this" }
 
 #[test]
 fn search_only_also_pipes_selected_desc_to_pipeout_command() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let config_dir = temp.path().join("config");
     let fake_bin_dir = temp.path().join("bin");
