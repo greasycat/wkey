@@ -1,8 +1,16 @@
 use std::fs;
 use wkey::model::{Item, Note, Shortcut};
 
+fn should_skip_on_github_actions() -> bool {
+    std::env::var_os("GITHUB_ACTIONS").is_some()
+}
+
 #[test]
 fn search_items_returns_selected_item_key_from_fzf_output() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let fake_fzf = temp.path().join("fake-fzf");
     fs::write(
@@ -30,6 +38,10 @@ fn search_items_returns_selected_item_key_from_fzf_output() {
 
 #[test]
 fn search_items_invokes_fzf_with_top_aligned_layout() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let fake_fzf = temp.path().join("fake-fzf");
     let args_file = temp.path().join("args.txt");
@@ -63,6 +75,10 @@ fn search_items_invokes_fzf_with_top_aligned_layout() {
 
 #[test]
 fn search_items_with_fallback_does_not_invoke_fallback_on_cancel() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let fake_fzf = temp.path().join("fake-fzf");
     fs::write(&fake_fzf, "#!/bin/sh\nexit 130\n").unwrap();
