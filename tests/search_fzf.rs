@@ -102,3 +102,41 @@ fn search_items_with_fallback_does_not_invoke_fallback_on_cancel() {
 
     assert_eq!(selected, None);
 }
+
+#[test]
+fn search_items_truncate_multiline_note_descriptions_for_fzf_rows() {
+    if should_skip_on_github_actions() {
+        return;
+    }
+
+    let temp = tempfile::tempdir().unwrap();
+    let fake_fzf = temp.path().join("fake-fzf");
+    let stdin_file = temp.path().join("stdin.txt");
+    fs::write(
+        &fake_fzf,
+        "#!/bin/sh\nstdin_file=\"$(dirname \"$0\")/stdin.txt\"\ncat > \"$stdin_file\"\nprintf 'note\\037shell\\037tip\\tnote\\tshell\\t\\tFirst line...\\n'",
+    )
+    .unwrap();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&fake_fzf).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&fake_fzf, perms).unwrap();
+    }
+
+    let items = vec![Item::Note(Note::new(
+        "tip",
+        "First line\n\nSecond paragraph",
+        "shell",
+    ))];
+    let selected = wkey::search::search_items(&items, fake_fzf.as_path()).unwrap();
+    let stdin = fs::read_to_string(stdin_file).unwrap();
+
+    assert_eq!(selected.as_deref(), Some("note\u{1f}shell\u{1f}tip"));
+    assert_eq!(
+        stdin,
+        "note\u{1f}shell\u{1f}tip\tnote\tshell\t\tFirst line..."
+    );
+}

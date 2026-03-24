@@ -72,3 +72,33 @@ fn render_to_string_uses_custom_keyboard_layout() {
     assert!(output.contains("Fn"));
     assert!(!output.contains("[Esc]"));
 }
+
+#[test]
+fn render_to_string_preserves_multiline_note_details_and_truncates_list_preview() {
+    let items = vec![Item::Note(Note::new(
+        "tip",
+        "First line\n\nSecond paragraph",
+        "shell",
+    ))];
+
+    let output = render_to_string(&items, Some("note\u{1f}shell\u{1f}tip"), 120, 24).unwrap();
+
+    assert!(output.contains("First line..."));
+    assert!(!output.contains("First line  Second paragraph"));
+    assert!(output.contains("Group: shell"));
+    assert!(output.contains("First line"));
+    assert!(output.contains("Second paragraph"));
+
+    let lines = output.lines().collect::<Vec<_>>();
+    let second_paragraph_index = lines
+        .iter()
+        .position(|line| line.contains("Second paragraph"))
+        .unwrap();
+
+    assert!(lines[second_paragraph_index - 2].contains("First line"));
+    assert!(
+        lines[second_paragraph_index - 1]
+            .trim_matches(|ch: char| ch == '│' || ch == ' ')
+            .is_empty()
+    );
+}

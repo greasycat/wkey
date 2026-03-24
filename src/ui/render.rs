@@ -1,4 +1,5 @@
 use crate::config::{APP_TITLE, KeyboardCell};
+use crate::display::{display_lines, single_line_preview};
 use crate::model::{AppView, Item, ItemKind, Shortcut};
 use crate::pipeout;
 use crate::ui::keyboard::build_keyboard_lines_with_layout;
@@ -330,6 +331,10 @@ fn format_note_label(note_id: &str) -> String {
         }
         None => String::new(),
     }
+}
+
+fn detail_description_lines(text: &str) -> Vec<Line<'static>> {
+    display_lines(text).into_iter().map(Line::from).collect()
 }
 
 pub fn render_to_string(
@@ -836,13 +841,18 @@ fn draw_app(
     let area = outer.inner(frame.area());
     frame.render_widget(outer, frame.area());
 
+    let detail_lines = selected_detail(app);
+
     let [filter_area, content_area] =
         Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(area);
     let [list_area, right_area] =
         Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
             .areas(content_area);
+    let detail_height = (detail_lines.len() as u16)
+        .saturating_add(2)
+        .clamp(6, right_area.height.saturating_sub(6).max(6));
     let [detail_area, keyboard_area] =
-        Layout::vertical([Constraint::Length(6), Constraint::Min(0)]).areas(right_area);
+        Layout::vertical([Constraint::Length(detail_height), Constraint::Min(0)]).areas(right_area);
 
     let group_width = (group_label.chars().count().max(group_query.chars().count()) as u16)
         .saturating_add(4)
@@ -946,7 +956,7 @@ fn draw_app(
                         };
                         ListItem::new(Line::from(vec![
                             Span::styled(lead, lead_style),
-                            Span::raw(item.desc().to_owned()),
+                            Span::raw(single_line_preview(item.desc())),
                         ]))
                     })
                     .collect::<Vec<_>>()
@@ -960,7 +970,7 @@ fn draw_app(
         }
     }
 
-    let detail = Paragraph::new(selected_detail(app))
+    let detail = Paragraph::new(detail_lines)
         .wrap(Wrap { trim: false })
         .block(Block::default().title(" Selection ").borders(Borders::ALL));
     frame.render_widget(detail, detail_area);
@@ -983,25 +993,31 @@ fn selected_shortcut(item: Option<&Item>) -> Option<&Shortcut> {
 
 fn selected_detail(app: AppView<'_>) -> Vec<Line<'static>> {
     match app.selected() {
-        Some(Item::Shortcut(shortcut)) => vec![
-            Line::from(vec![
-                Span::styled("Selected: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(shortcut.id.clone(), Style::default().fg(Color::Yellow)),
-            ]),
-            Line::from(format!("Type: shortcut")),
-            Line::from(format!("Group: {}", shortcut.group)),
-            Line::from(format!("Key: {}", shortcut.key)),
-            Line::from(shortcut.desc.clone()),
-        ],
-        Some(Item::Note(note)) => vec![
-            Line::from(vec![
-                Span::styled("Selected: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(note.id.clone(), Style::default().fg(Color::Yellow)),
-            ]),
-            Line::from("Type: note"),
-            Line::from(format!("Group: {}", note.group)),
-            Line::from(note.desc.clone()),
-        ],
+        Some(Item::Shortcut(shortcut)) => {
+            let mut lines = vec![
+                Line::from(vec![
+                    Span::styled("Selected: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(shortcut.id.clone(), Style::default().fg(Color::Yellow)),
+                ]),
+                Line::from("Type: shortcut"),
+                Line::from(format!("Group: {}", shortcut.group)),
+                Line::from(format!("Key: {}", shortcut.key)),
+            ];
+            lines.extend(detail_description_lines(&shortcut.desc));
+            lines
+        }
+        Some(Item::Note(note)) => {
+            let mut lines = vec![
+                Line::from(vec![
+                    Span::styled("Selected: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(note.id.clone(), Style::default().fg(Color::Yellow)),
+                ]),
+                Line::from("Type: note"),
+                Line::from(format!("Group: {}", note.group)),
+            ];
+            lines.extend(detail_description_lines(&note.desc));
+            lines
+        }
         None => vec![
             Line::from("Selected: none"),
             Line::from("Keep typing to narrow the list."),
@@ -1014,8 +1030,8 @@ fn selected_detail(app: AppView<'_>) -> Vec<Line<'static>> {
 mod tests {
     use super::{
         ALL_GROUP_LABEL, ActiveFilter, AppState, GroupSelection, SelectorAction,
-        calculate_viewport, format_note_label, handle_key_event, handle_selector_key_event,
-        handle_submit_key, should_quit,
+        calculate_viewport, detail_description_lines, format_note_label, handle_key_event,
+        handle_selector_key_event, handle_submit_key, should_quit,
     };
     use crate::model::{Item, Note, Shortcut};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1127,6 +1143,16 @@ mod tests {
     #[test]
     fn format_note_label_removes_dashes_and_capitalizes_first_letter() {
         assert_eq!(format_note_label("prompt-tip"), "Prompt tip");
+    }
+
+    #[test]
+    fn detail_description_lines_split_multiline_text() {
+        let lines = detail_description_lines("First line\r\n\r\nSecond line\n");
+
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0].to_string(), "First line");
+        assert_eq!(lines[1].to_string(), "");
+        assert_eq!(lines[2].to_string(), "Second line");
     }
 
     #[test]
