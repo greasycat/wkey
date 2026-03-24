@@ -1,6 +1,6 @@
 [package]
 name = "wkey"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A terminal-first cheatsheet for keyboard shortcuts and working notes"
 readme = "README.md"

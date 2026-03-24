@@ -1,4 +1,5 @@
 use crate::config::DEFAULT_FZF_LAYOUT;
+use crate::display::single_line_preview;
 use crate::model::{Item, ItemKind};
 use anyhow::{Result, anyhow};
 use std::io::{ErrorKind, Write};
@@ -54,7 +55,7 @@ fn run_fzf(items: &[Item], fzf_bin: &Path) -> std::result::Result<Option<String>
                 item.kind().as_str(),
                 item.group(),
                 item.key_combo().unwrap_or(""),
-                item.desc()
+                single_line_preview(item.desc())
             )
         })
         .collect::<Vec<_>>()
